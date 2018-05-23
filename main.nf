@@ -142,7 +142,7 @@ process tar_crams {
 
    script:
    """
-   tar cf all_merged_cram.tar $thecramfiles
+   tar chf all_merged_cram.tar $thecramfiles
    """
 }
 
