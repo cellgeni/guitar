@@ -1,0 +1,6 @@
+name: rnaget0.1
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+
