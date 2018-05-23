@@ -132,7 +132,7 @@ process merge_sample_crams {
 
 process tar_crams {
    tag "${thecramfiles[0].baseName - '.cram'}"
-   publishDir "${params.outdir}/guitar", mode: 'copy'
+   publishDir "${params.outdir}/guitar", mode: 'move'
 
    input:
    file thecramfiles from sample_cram_file.collect()
