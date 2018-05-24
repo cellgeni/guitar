@@ -118,8 +118,6 @@ process irods {
 process merge_sample_crams {
     tag "${sample}"
 
-    publishDir "${params.outdir}/sample_cram_files", mode: 'copy'
-
     input: 
         set val(sample), file(crams) from cram_files
     output: 
