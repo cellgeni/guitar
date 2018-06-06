@@ -27,7 +27,7 @@ def helpMessage() {
  */
 
 // Pipeline version
-version = '0.1'
+version = '0.2'
 
 // Show help message
 params.help = false
@@ -47,6 +47,10 @@ params.reads = 'cram/*.cram'
 params.outdir = './results'
 params.email = false
 params.plaintext_email = false
+params.samplefile = false
+params.studyid = false
+params.runid = false
+params.lane = false
 
 // Define regular variables so that they can be overwritten
 forward_stranded = params.forward_stranded
@@ -96,11 +100,32 @@ try {
 
 
 
+if (params.runid && params.lane) {
+    output:
+        set val(sample), file('*.cram') optional true into cram_files
 
-/*
- * Create a channel for input sample ids
- */
-sample_list = Channel.fromPath('samples.txt')
+    script:
+    """
+    irods-iget-runid.sh ${params.runid} ${params.lane}
+    """
+}
+
+
+else {
+    if (params.studyid) {
+      output:
+          Channel.fromPath('samplefile')
+      script:
+      """
+      irods-list-study.sh $params.studyid | tail -n +2 | cut -f 1 | sort -u > samplefile
+      """
+    }
+    else if (params.samplefile) {
+
+        sample_list = Channel.fromPath(params.samplefile)
+    }
+}
+
 
 process irods {
     tag "${sample}"
@@ -113,7 +138,7 @@ process irods {
         set val(sample), file('*.cram') optional true into cram_files
     script:
     """
-    irods.sh ${sample}
+    irods-iget-sample.sh ${sample}
     """
 }
 
