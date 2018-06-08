@@ -6,7 +6,7 @@ vim: syntax=groovy
                               R N A G E T    P I P E L I N E
 ========================================================================================
  #### Homepage / Documentation
- https://github.com/cellgeni/
+ https://github.com/cellgeni/guitar
  #### Authors
  Vladimir Kiselev @wikiselev <vk6@sanger.ac.uk>
  Stijn van Dongen @micans <svd@sanger.ac.uk>
