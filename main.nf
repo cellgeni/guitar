@@ -166,7 +166,12 @@ process merge_from_cram_set {
         file "${sample}.cram" into sample_cram_file
     script:
     """
-    samtools merge -f ${sample}.cram ${crams}
+    num=$(for f in ${crams}; do echo $f; done | grep -c ".cram\$");
+    if [[ $num == 1 ]]; then
+        ln -s "${crams}" ${sample}.cram
+    else
+        samtools merge -f ${sample}.cram ${crams}
+    fi
     """
 }
 
