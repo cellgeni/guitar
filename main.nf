@@ -60,6 +60,7 @@ else {
 
 // Configurable variables
 params.name = false
+params.tartag = "all_merged"
 
 
 // Has the run name been specified by the user?
@@ -106,20 +107,45 @@ try {
 
 
 if (params.runid != null && params.lane != null) {
+
     semisample = params.runid + '-' + params.lane
+
     process from_runid {
         output:
-            file('*.cram') optional true into sample_cram_file
+            file('*igetlist.txt') optional true into iget_file
 
         script:
         """
-        irods-iget-runid.sh ${params.runid} ${params.lane}
+        irods-iget-runid.sh ${params.runid} ${params.lane} > ${semisample}.igetlist.txt
+        """
+    }
+
+    iget_file
+      .splitText()
+      .map { it.trim() }
+      .set { igetlines }
+
+    process run_iget {
+
+        tag "${semisample}"
+        maxForks 30
+
+        input:
+          val(igetspec) from igetlines
+
+        output:
+          file('*.cram') into sample_cram_file
+
+        script:
+        """
+          iget -K ${igetspec}
         """
     }
 }
 
 else {
     if (params.studyid != null) {
+
         process from_studyid {
             output:
                 file studyid_samplefile into studyid_lines
@@ -143,7 +169,7 @@ else {
 
     process from_sample_lines {
         tag "${sample}"
-        maxForks 29
+        maxForks 30
 
         input:
             val sample from samplelines
@@ -183,11 +209,11 @@ process tar_crams {
    file thecramfiles from sample_cram_file.collect()
 
    output:
-   file 'all_merged_cram.tar'
+   file '*.tar'
 
    script:
    """
-   tar chf all_merged_cram.tar $thecramfiles
+   tar chf ${params.tartag}.tar $thecramfiles
    """
 }
 
