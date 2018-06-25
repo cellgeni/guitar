@@ -167,7 +167,7 @@ process merge_from_cram_set {
     script:
     """
     num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
-    if [[ $num == 1 ]]; then
+    if [[ \$num == 1 ]]; then
         ln -s "${crams}" ${sample}.cram
     else
         samtools merge -f ${sample}.cram ${crams}
