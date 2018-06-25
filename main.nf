@@ -166,7 +166,7 @@ process merge_from_cram_set {
         file "${sample}.cram" into sample_cram_file
     script:
     """
-    num=\$(for f in ${crams}; do echo $f; done | grep -c ".cram\$");
+    num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
     if [[ $num == 1 ]]; then
         ln -s "${crams}" ${sample}.cram
     else
