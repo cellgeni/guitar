@@ -116,6 +116,8 @@ if (params.runid != null && params.lane != null) {
         irods-iget-runid.sh ${params.runid} ${params.lane}
         """
     }
+                // TODO make sure control flow is optimally clear, find the best way.
+    cram_set = Channel.empty()
 }
 
 else {
