@@ -116,8 +116,6 @@ if (params.runid != null && params.lane != null) {
         irods-iget-runid.sh ${params.runid} ${params.lane}
         """
     }
-                // TODO make sure control flow is optimally clear, find the best way.
-    cram_set = Channel.empty()
 }
 
 else {
@@ -156,26 +154,26 @@ else {
         irods-iget-sample.sh ${sample}
         """
     }
+
+    process merge_from_cram_set {
+        tag "${sample}"
+
+        input: 
+            set val(sample), file(crams) from cram_set
+        output: 
+            file "${sample}.cram" into sample_cram_file
+        script:
+        """
+        num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
+        if [[ \$num == 1 ]]; then
+            ln -s "${crams}" ${sample}.cram
+        else
+            samtools merge -f ${sample}.cram ${crams}
+        fi
+        """
+    }
 }
 
-
-process merge_from_cram_set {
-    tag "${sample}"
-
-    input: 
-        set val(sample), file(crams) from cram_set
-    output: 
-        file "${sample}.cram" into sample_cram_file
-    script:
-    """
-    num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
-    if [[ \$num == 1 ]]; then
-        ln -s "${crams}" ${sample}.cram
-    else
-        samtools merge -f ${sample}.cram ${crams}
-    fi
-    """
-}
 
 process tar_crams {
    tag "${thecramfiles[0].baseName - '.cram'}"
