@@ -109,7 +109,7 @@ if (params.runid != null && params.lane != null) {
     semisample = params.runid + '-' + params.lane
     process from_runid {
         output:
-            set val(semisample), file('*.cram') optional true into cram_set
+            set file('*.cram') optional true into sample_cram_file
 
         script:
         """
