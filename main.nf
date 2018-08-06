@@ -22,18 +22,28 @@ def helpMessage() {
      rnaget pipeline v${version}
     =========================================
     Use either
-      (a) --samplefile FNAME
-      (b) --studyid ID
+      (a) --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
+      (b) --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
       (c) --runid ID --lane NUM
+
     Studyid is queried in mlmwarehouse for sample names. Alternatively,
-    samplefile FNAME should have one sample name on each line.  Either (1) a
-    list of samplenames from (a|b) or (2) runid and lane number from (c) are
-    used to get cram files from IRODS. Then cram files are merged and tarred.
+    samplefile FNAME should have one sample name on each line; studyid can
+    still be used as samples may belong to multiple studies.
+
+    Either (1) a list of samplenames and/or a study id from (a|b) or (2) runid
+    and lane number from (c) are used to get cram files from IRODS. For (1)
+    these lists can be further controlled using --librarytype TYPE and
+    --manualqc off.
+
+    Then cram files are merged and tarred.
     """.stripIndent()
 }
 
+def irodsnullvalue = "--"
 params.samplefile = null
-params.studyid = null
+params.studyid      = irodsnullvalue
+params.librarytype  = irodsnullvalue
+params.manualqc     = irodsnullvalue
 params.runid = null
 params.lane = null
 params.outdir = "results"
@@ -144,7 +154,7 @@ if (params.runid != null && params.lane != null) {
 }
 
 else {
-    if (params.studyid != null) {
+    if (params.studyid != irodsnullvalue && params.samplefile == null) {
 
         process from_studyid {
             output:
@@ -177,7 +187,7 @@ else {
             set val(sample), file('*.cram') optional true into cram_set
         script:
         """
-        irods-iget-sample.sh ${sample}
+        irods.sh -s ${sample} -t ${params.studyid} -l ${params.librarytype} -q ${params.manualqc}
         """
     }
 
@@ -190,11 +200,15 @@ else {
             file "${sample}.cram" into sample_cram_file
         script:
         """
+            # this is not very elegant ... rethink perhaps.
         num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
         if [[ \$num == 1 ]]; then
             ln -s "${crams}" ${sample}.cram
         else
-            samtools merge -f ${sample}.cram ${crams}
+            # samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
+            if [[ ! samtools cat -o ${sample}.cram ${crams} ]]; then
+                samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
+            fi
         fi
         """
     }
