@@ -5,12 +5,14 @@ set -euo pipefail
 NULL=--         # A default absent/not-specified token so that callers can use all options set to defaults
                 # e.g. irods.sh -s SAMPLE -t STUDYID -l -- -q --
                 #      irods.sh -s SAMPLE -t -- -l -- -q off
+                # Do not change this; calling scripts will depend on it.
 sampleid=
 studyid=$NULL
 librarytype=$NULL
 manualqc=$NULL
+listobj=$NULL
 
-while getopts :s:t:l:q:h opt
+while getopts :s:t:l:q:Dh opt
 do
     case "$opt" in
     s)
@@ -18,6 +20,9 @@ do
       ;;
     t)
       studyid=$OPTARG
+      ;;
+    D)
+      listobj=true
       ;;
     l)
       librarytype="$OPTARG"
@@ -31,13 +36,14 @@ do
       ;;
     h)
       cat <<EOU
-Usage: irods.sh -s SAMPLENAME [-t STUDYID] [-l LIBRARYTYPE] [-q off]
+Usage: irods.sh -s SAMPLENAME [-t STUDYID] [-l LIBRARYTYPE] [-q off] [-D]
 =============================================================
 |                                                           |
 |  For -t and -l and -q you can use -- as a no-op value     |
 |                                                           |
 =============================================================
   -q off    remove manual_qc = 1 from imeta comand.
+  -D        list database objects rather than executing iget commands
 EOU
       exit
       ;;
@@ -52,6 +58,7 @@ if [[ -z $sampleid ]]; then
   echo "I need a sample ID (-s option)"
   false
 fi
+if [[ $listobj == $NULL ]]; then listobj=false; fi
 
 part_studyid=
 part_librarytype=
@@ -81,7 +88,7 @@ fi
     #
     # (3) In the presence of library_type clause, it seems faster if manual_qc is on the left.
     # in the absence of library_type clause, it seems faster if it is on the right.
-    # We need to ask the NPG people for advice here.
+    # We need to ask the DBA people for advice here.
     #
 
 if [[ $librarytype == $NULL ]]; then
@@ -93,10 +100,16 @@ fi
 
 IMETA_OUTPUT=$(eval $cmd)
 
+
 if [[ $(echo $IMETA_OUTPUT) != 'No rows found' ]]; then
+  if $listobj; then
+    echo "${IMETA_OUTPUT}" \
+    | perl -0777 -ne 'while (/collection:\s*(\S+)\ndataObj:\s*(\S+)/gs) { print "$1/$2\n" }'
+  else
     echo "${IMETA_OUTPUT}" \
     | perl -0777 -ne 'while (/collection:\s*(\S+)\ndataObj:\s*(\S+)/gs) { print "iget -K $1/$2\n" }' \
-    | cat
+    | bash -e
+  fi
 fi
  
 

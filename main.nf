@@ -187,7 +187,7 @@ else {
             set val(sample), file('*.cram') optional true into cram_set
         script:
         """
-        irods.sh -s ${sample} -t ${params.studyid} -l ${params.librarytype} -q ${params.manualqc}
+        irods.sh -s ${sample} -t ${params.studyid} -l "${params.librarytype}" -q ${params.manualqc}
         """
     }
 
@@ -206,7 +206,7 @@ else {
             ln -s "${crams}" ${sample}.cram
         else
             # samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
-            if [[ ! samtools cat -o ${sample}.cram ${crams} ]]; then
+            if ! samtools cat -o ${sample}.cram ${crams}; then
                 samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
             fi
         fi
@@ -230,6 +230,5 @@ process tar_crams {
    tar chf ${params.tartag}.tar $thecramfiles
    """
 }
-
 
 
