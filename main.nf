@@ -199,13 +199,12 @@ else {
         output: 
             file "${sample}.cram" into sample_cram_file
         script:
+        cram0 = crams[0]
         """
-            # this is not very elegant ... rethink perhaps.
         num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
         if [[ \$num == 1 ]]; then
-            ln -s "${crams}" ${sample}.cram
+            ln -s "${cram0}" ${sample}.cram
         else
-            # samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
             if ! samtools cat -o ${sample}.cram ${crams}; then
                 samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
             fi
