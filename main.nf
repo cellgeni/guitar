@@ -24,7 +24,7 @@ def helpMessage() {
     Use either
       (a) --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
       (b) --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
-      (c) --runid ID --lane NUM
+      (c) --runid ID --laneid NUM
 
     Studyid is queried in mlmwarehouse for sample names. Alternatively,
     samplefile FNAME should have one sample name on each line; studyid can
@@ -45,7 +45,7 @@ params.studyid      = irodsnullvalue
 params.librarytype  = irodsnullvalue
 params.manualqc     = irodsnullvalue
 params.runid = null
-params.lane = null
+params.laneid = null
 params.outdir = "results"
 params.help = false
 
@@ -55,7 +55,7 @@ if (params.help) {
   exit 0
 }
 
-if ((params.runid != null && params.lane != null) || params.samplefile || params.studyid) {
+if ((params.runid != null && params.laneid != null) || params.samplefile || params.studyid) {
 }
 else {
   helpMessage()
@@ -116,9 +116,9 @@ try {
 
 
 
-if (params.runid != null && params.lane != null) {
+if (params.runid != null && params.laneid != null) {
 
-    semisample = params.runid + '-' + params.lane
+    semisample = params.runid + '-' + params.laneid
 
     process from_runid {
         output:
@@ -126,7 +126,7 @@ if (params.runid != null && params.lane != null) {
 
         script:
         """
-        irods.sh -r 26425 -l 2 -D 
+        irods.sh -r ${params.runid} -l ${params.laneid} -D 
         """
     }
 
@@ -187,7 +187,7 @@ else {
             set val(sample), file('*.cram') optional true into cram_set
         script:
         """
-        irods.sh -s ${sample} -t ${params.studyid} -l "${params.librarytype}" -q ${params.manualqc}
+        irods.sh -s ${sample} -t ${params.studyid} -y "${params.librarytype}" -q ${params.manualqc}
         """
     }
 
