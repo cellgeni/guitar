@@ -24,7 +24,7 @@ def helpMessage() {
     Use either
       (a) --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
       (b) --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
-      (c) --runid ID --laneid NUM
+      (c) --runid ID --lane NUM
 
     Studyid is queried in mlmwarehouse for sample names. Alternatively,
     samplefile FNAME should have one sample name on each line; studyid can
@@ -45,7 +45,7 @@ params.studyid      = irodsnullvalue
 params.librarytype  = irodsnullvalue
 params.manualqc     = irodsnullvalue
 params.runid = null
-params.laneid = null
+params.lane = null
 params.outdir = "results"
 params.help = false
 
@@ -55,7 +55,7 @@ if (params.help) {
   exit 0
 }
 
-if ((params.runid != null && params.laneid != null) || params.samplefile || params.studyid) {
+if ((params.runid != null && params.lane != null) || params.samplefile || params.studyid) {
 }
 else {
   helpMessage()
@@ -116,9 +116,9 @@ try {
 
 
 
-if (params.runid != null && params.laneid != null) {
+if (params.runid != null && params.lane != null) {
 
-    semisample = params.runid + '-' + params.laneid
+    semisample = params.runid + '-' + params.lane
 
     process from_runid {
         output:
@@ -126,7 +126,7 @@ if (params.runid != null && params.laneid != null) {
 
         script:
         """
-        irods.sh -r ${params.runid} -l ${params.laneid} -D 
+        irods.sh -r ${params.runid} -l ${params.lane} -D > ${semisample}.igetlist.txt
         """
     }
 
@@ -174,30 +174,56 @@ else {
 
         sample_list
           .flatMap{ it.readLines() }    // TODO: see splitText() above. unified idiom possible?
-          .set { samplelines }
+          .set { ch_samplelines }
     }
 
     process from_sample_lines {
         tag "${sample}"
-        maxForks 30
 
         input:
-            val sample from samplelines
+            val sample from ch_samplelines
         output: 
-            set val(sample), file('*.cram') optional true into cram_set
+            set val(sample), file('*.igetlist.txt') optional true into ch_iget_file
         script:
         """
-        irods.sh -s ${sample} -t ${params.studyid} -y "${params.librarytype}" -q ${params.manualqc}
+        irods.sh -s ${sample} -t ${params.studyid} -l "${params.librarytype}" -q ${params.manualqc} -D > ${sample}.igetlist.txt
         """
     }
+
+    ch_iget_file
+      .map { tag, file -> [tag, file.readLines() ] }
+      .map { tag, lines -> tuple( groupKey(tag, lines.size()), lines ) }
+      .transpose()
+      .set { ch_iget_item }
+
+    process from_iget_item {
+      tag "${samplename}-${igetitem}"
+
+      maxForks 30
+
+      input:
+      set val(samplename), val(igetitem) from ch_iget_item
+
+      output:
+      set val(samplename), file('*.cram') optional true into ch_iget_merge
+
+      script:
+      """
+      iget -K ${igetitem}
+      """
+    }
+
+    ch_iget_merge
+      .groupTuple()
+      .set { ch_cram_set }
 
     process merge_from_cram_set {
         tag "${sample}"
 
         input: 
-            set val(sample), file(crams) from cram_set
+            set val(sample), file(crams) from ch_cram_set
         output: 
-            file "${sample}.cram" into sample_cram_file
+            file "${sample}.cram" into ch_sample_cram_file
         script:
         cram0 = crams[0]
         """
@@ -219,7 +245,7 @@ process tar_crams {
    publishDir "${params.outdir}/guitar", mode: 'move'
 
    input:
-   file thecramfiles from sample_cram_file.collect()
+   file thecramfiles from ch_sample_cram_file.collect()
 
    output:
    file '*.tar'
