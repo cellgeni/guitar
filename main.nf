@@ -179,6 +179,7 @@ else {
 
     process from_sample_lines {
         tag "${sample}"
+        publishDir "${params.outdir}/cramlists"
 
         input:
             val sample from ch_samplelines
