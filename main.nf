@@ -144,7 +144,7 @@ if (params.runid != null && params.lane != null) {
           val(igetspec) from igetlines
 
         output:
-          file('*.cram') into sample_cram_file
+          file('*.cram') into ch_sample_cram_file
 
         script:
         """

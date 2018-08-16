@@ -1,5 +1,7 @@
 #!/bin/bash
 
+                # This script implements a thin convenience layer above imeta and iget.
+
 set -euo pipefail
 
 NULL=--         # A default absent/not-specified token so that callers can use all options set to defaults
@@ -57,7 +59,7 @@ do
     h)
       cat <<EOU
 Usage:
-  irods.sh -s SAMPLENAME [ -t STUDYID ] [ OPTIONS ]
+  irods.sh -s SAMPLENAME [ -t STUDYID | -y librarytype ] [ OPTIONS ]
   irods.sh -r RUNID -l LANEID  [ OPTIONS ]
 
   -t STUDYID
@@ -65,10 +67,16 @@ Usage:
   -q off      remove manual_qc = 1 from imeta comand
   -D          list database objects rather than executing iget commands
   -A          list attributes of selected database objects
+              This produces a flattened line-based format.
   -,          Read objects and list attributes. Use e.g. as
-              myrods.sh -r 26425 -l 2 -D | head -n 2 | myrods.sh -r 26425 -l 2 -,
 
-  For -s -r -l -t -y and -q the no-op value is --
+            myrods.sh -r 26425 -l 2 -D | head -n 2 | myrods.sh -r 26425 -l 2 -,
+
+              Not needed if you use -A, but the above is useful if you only
+              want to query a subset of objects.
+
+  For -s -r -l -t -y and -q the no-op value is --. This can be useful for
+  pipelines invoking this script.
 EOU
       exit
       ;;
@@ -97,20 +105,22 @@ if [[ $manualqc != "off" ]]; then
 fi
 
     #
-    # The first two modes are slightly obscure, but should be self-documenting.
+    # The first two branches are slightly obscure, but should be self-documenting.
     # The second mode (listattr && ! listobj) indicates we were invoked with -A
     # and the caller wants attribute data for cram/object files corresponding to sample IDs.
     # In that case we first obtain the objects with -D and subsequently pipe this
     # data to irods in read_obj mode.
     #
 if $read_obj; then
-  >&2 echo reading object IDs
+  >&2 echo reading object IDs and applying "'imeta ls -d ID'"
   while read d; do
     export d
     export T=$mytag
-    imeta ls -d $d | perl -0777 -ne 'while (/attribute:\s*(.*?)\nvalue:\s*(\S+)/gs) { print "$ENV{T}\t$ENV{d}\t$1\t$2\n" }'
+    imeta ls -d $d | perl -0777 -ne 'while (/attribute:\s*(.*?)\nvalue:\s*(.*?)\n/gs) { print "$ENV{T}\t$ENV{d}\t$1\t$2\n" }'
   done
 elif $listattr && ! $listobj; then
+                 #  keep these arguments, as a meaningful tag is constructed from them,
+                 #  see above in the read_obj branch.
   "$0" "$@" -D | myrods.sh -, -s $sampleid -r $runid -l $laneid
 
 elif [[ $runid != $NULL && $laneid != $NULL ]]; then
