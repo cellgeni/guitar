@@ -167,7 +167,7 @@ else {
         studyid_lines
           .splitText()                  // TODO: see readLines below. unified idiom possible?
           .map { it.trim() }
-          .set { samplelines }
+          .set { ch_samplelines }
     }
     else if (params.samplefile != null) {
         sample_list = Channel.fromPath(params.samplefile)
@@ -187,7 +187,7 @@ else {
             set val(sample), file('*.igetlist.txt') optional true into ch_iget_file
         script:
         """
-        irods.sh -s ${sample} -t ${params.studyid} -l "${params.librarytype}" -q ${params.manualqc} -D > ${sample}.igetlist.txt
+        irods.sh -s ${sample} -t ${params.studyid} -y "${params.librarytype}" -q ${params.manualqc} -D > ${sample}.igetlist.txt
         """
     }
 
@@ -197,7 +197,7 @@ else {
       .transpose()
       .set { ch_iget_item }
 
-    process from_iget_item {
+    process do_iget {
       tag "${samplename}-${igetitem}"
 
       maxForks 30
@@ -210,7 +210,7 @@ else {
 
       script:
       """
-      iget -K ${igetitem}
+      iget -N ${task.cpus} -K ${igetitem}
       """
     }
 
