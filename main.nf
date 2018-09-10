@@ -249,11 +249,14 @@ process tar_crams {
    file thecramfiles from ch_sample_cram_file.collect()
 
    output:
-   file '*.tar'
+   file '*.tar', file '*.md5'
 
    script:
+   def tf = "${params.tartag}.tar"
+   def m5 = "${params.tartag}.md5"
    """
-   tar chf ${params.tartag}.tar $thecramfiles
+   tar chf $tf $thecramfiles
+   md5sum $tf > $m5
    """
 }
 
