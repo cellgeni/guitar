@@ -246,10 +246,10 @@ process tar_crams {
    publishDir "${params.outdir}/guitar", mode: 'move'
 
    input:
-   file thecramfiles from ch_sample_cram_file.collect()
+     file thecramfiles from ch_sample_cram_file.collect()
 
    output:
-   file '*.tar', file '*.md5'
+     file('*.tar'), file('*.md5')
 
    script:
    def tf = "${params.tartag}.tar"
