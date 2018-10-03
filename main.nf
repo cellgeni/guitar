@@ -249,7 +249,7 @@ process tar_crams {
      file thecramfiles from ch_sample_cram_file.collect()
 
    output:
-     file('*.tar'), file('*.md5')
+     set file('*.tar'), file('*.md5')
 
    script:
    def tf = "${params.tartag}.tar"
