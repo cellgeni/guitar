@@ -6,52 +6,72 @@ vim: syntax=groovy
                               R N A G E T    P I P E L I N E
 ========================================================================================
  #### Homepage / Documentation
- https://github.com/cellgeni/
+ https://github.com/cellgeni/guitar
  #### Authors
  Vladimir Kiselev @wikiselev <vk6@sanger.ac.uk>
  Stijn van Dongen @micans <svd@sanger.ac.uk>
 ----------------------------------------------------------------------------------------
 */
 
+// Pipeline version
+version = '0.2'
+
 def helpMessage() {
     log.info"""
     =========================================
      rnaget pipeline v${version}
     =========================================
-    Usage:
+    Use either
+      (a) --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
+      (b) --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
+      (c) --runid ID --lane NUM
+
+    Studyid is queried in mlmwarehouse for sample names. Alternatively,
+    samplefile FNAME should have one sample name on each line; studyid can
+    still be used as samples may belong to multiple studies.
+
+    Either (1) a list of samplenames and/or a study id from (a|b) or (2) runid
+    and lane number from (c) are used to get cram files from IRODS. For (1)
+    these lists can be further controlled using --librarytype TYPE and
+    --manualqc off.
+
+    Then cram files are merged and tarred.
     """.stripIndent()
 }
+
+def irodsnullvalue = "--"
+params.samplefile = null
+params.studyid      = irodsnullvalue
+params.librarytype  = irodsnullvalue
+params.manualqc     = irodsnullvalue
+params.runid = null
+params.lane = null
+params.outdir = "results"
+params.help = false
+
+
+if (params.help) {
+  helpMessage()
+  exit 0
+}
+
+if ((params.runid != null && params.lane != null) || params.samplefile || params.studyid) {
+}
+else {
+  helpMessage()
+  exit 1
+}
+
 
 /*
  * SET UP CONFIGURATION VARIABLES
  */
 
-// Pipeline version
-version = '0.1'
-
-// Show help message
-params.help = false
-if (params.help){
-    helpMessage()
-    exit 0
-}
 
 // Configurable variables
 params.name = false
-params.project = false
-params.genome = 'GRCh38'
-params.forward_stranded = false
-params.reverse_stranded = false
-params.unstranded = false
-params.reads = 'cram/*.cram'
-params.outdir = './results'
-params.email = false
-params.plaintext_email = false
+params.tartag = "all_merged"
 
-// Define regular variables so that they can be overwritten
-forward_stranded = params.forward_stranded
-reverse_stranded = params.reverse_stranded
-unstranded = params.unstranded
 
 // Has the run name been specified by the user?
 //  this has the bonus effect of catching both -name and --name
@@ -96,55 +116,148 @@ try {
 
 
 
+if (params.runid != null && params.lane != null) {
 
-/*
- * Create a channel for input sample ids
- */
-sample_list = Channel.fromPath('samples.txt')
+    semisample = params.runid + '-' + params.lane
 
-process irods {
-    tag "${sample}"
+    process from_runid {
+        output:
+            file('*igetlist.txt') optional true into iget_file
 
-    maxForks 29
-    
-    input: 
-        val sample from sample_list.flatMap{ it.readLines() }
-    output: 
-        set val(sample), file('*.cram') optional true into cram_files
-    script:
-    """
-    irods.sh ${sample}
-    """
+        script:
+        """
+        irods.sh -r ${params.runid} -l ${params.lane} -D > ${semisample}.igetlist.txt
+        """
+    }
+
+    iget_file
+      .splitText()
+      .map { it.trim() }
+      .set { igetlines }
+
+    process run_iget {
+
+        tag "${semisample}"
+        maxForks 30
+
+        input:
+          val(igetspec) from igetlines
+
+        output:
+          file('*.cram') into ch_sample_cram_file
+
+        script:
+        """
+          iget -K ${igetspec}
+        """
+    }
 }
 
-process merge_sample_crams {
-    tag "${sample}"
+else {
+    if (params.studyid != irodsnullvalue && params.samplefile == null) {
 
-    input: 
-        set val(sample), file(crams) from cram_files
-    output: 
-        file "${sample}.cram" into sample_cram_file
-    script:
-    """
-    samtools merge -f ${sample}.cram ${crams}
-    """
+        process from_studyid {
+            output:
+                file studyid_samplefile into studyid_lines
+            script:
+            """
+            irods-list-study.sh ${params.studyid} | tail -n +2 | cut -f 1 | sort -u > studyid_samplefile
+            """
+        }
+        studyid_lines
+          .splitText()                  // TODO: see readLines below. unified idiom possible?
+          .map { it.trim() }
+          .set { ch_samplelines }
+    }
+    else if (params.samplefile != null) {
+        sample_list = Channel.fromPath(params.samplefile)
+
+        sample_list
+          .flatMap{ it.readLines() }    // TODO: see splitText() above. unified idiom possible?
+          .set { ch_samplelines }
+    }
+
+    process from_sample_lines {
+        tag "${sample}"
+        publishDir "${params.outdir}/cramlists"
+
+        input:
+            val sample from ch_samplelines
+        output: 
+            set val(sample), file('*.igetlist.txt') optional true into ch_iget_file
+        script:
+        """
+        irods.sh -s ${sample} -t ${params.studyid} -y "${params.librarytype}" -q ${params.manualqc} -D > ${sample}.igetlist.txt
+        """
+    }
+
+    ch_iget_file
+      .map { tag, file -> [tag, file.readLines() ] }
+      .map { tag, lines -> tuple( groupKey(tag, lines.size()), lines ) }
+      .transpose()
+      .set { ch_iget_item }
+
+    process do_iget {
+      tag "${samplename}-${igetitem}"
+
+      maxForks 30
+
+      input:
+      set val(samplename), val(igetitem) from ch_iget_item
+
+      output:
+      set val(samplename), file('*.cram') optional true into ch_iget_merge
+
+      script:
+      """
+      iget -N ${task.cpus} -K ${igetitem}
+      """
+    }
+
+    ch_iget_merge
+      .groupTuple()
+      .set { ch_cram_set }
+
+    process merge_from_cram_set {
+        tag "${sample}"
+
+        input: 
+            set val(sample), file(crams) from ch_cram_set
+        output: 
+            file "${sample}.cram" into ch_sample_cram_file
+        script:
+        cram0 = crams[0]
+        """
+        num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
+        if [[ \$num == 1 ]]; then
+            ln -s "${cram0}" ${sample}.cram
+        else
+            if ! samtools cat -o ${sample}.cram ${crams}; then
+                samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
+            fi
+        fi
+        """
+    }
 }
+
 
 process tar_crams {
    tag "${thecramfiles[0].baseName - '.cram'}"
    publishDir "${params.outdir}/guitar", mode: 'move'
 
    input:
-   file thecramfiles from sample_cram_file.collect()
+     file thecramfiles from ch_sample_cram_file.collect()
 
    output:
-   file 'all_merged_cram.tar'
+     set file('*.tar'), file('*.md5')
 
    script:
+   def tf = "${params.tartag}.tar"
+   def m5 = "${params.tartag}.md5"
    """
-   tar chf all_merged_cram.tar $thecramfiles
+   tar chf $tf $thecramfiles
+   md5sum $tf > $m5
    """
 }
-
 
 
