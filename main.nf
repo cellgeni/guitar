@@ -126,7 +126,7 @@ if (params.runid != null && params.lane != null) {
 
         script:
         """
-        irods.sh -r ${params.runid} -l ${params.lane} -D > ${semisample}.igetlist.txt
+        irods.sh -r ${params.runid} -l ${params.lane} -q ${params.manualqc} -D > ${semisample}.igetlist.txt
         """
     }
 
