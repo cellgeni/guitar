@@ -46,8 +46,9 @@ params.librarytype  = irodsnullvalue
 params.manualqc     = irodsnullvalue
 params.runid = null
 params.lane = null
-params.outdir_cramtar  = "results"
-params.outdir_fastq    = "results"
+params.outdir          = "results"
+params.outdir_cramtar  = null
+params.outdir_fastq    = null
 params.publish_cramtar = true
 params.publish_fastq   = false
 params.help = false
@@ -249,7 +250,7 @@ else {
 
 process crams_to_fastq {
     tag "${sample}"
-    publishDir "${params.outdir_fastq}", mode: 'link'
+    publishDir "${params.outdir_fastq ?: params.outdir}", mode: 'link'
 
     when:
         params.publish_fastq
