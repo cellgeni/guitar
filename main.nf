@@ -46,7 +46,10 @@ params.librarytype  = irodsnullvalue
 params.manualqc     = irodsnullvalue
 params.runid = null
 params.lane = null
-params.outdir = "results"
+params.outdir_cramtar  = "results"
+params.outdir_fastq    = "results"
+params.publish_cramtar = true
+params.publish_fastq   = false
 params.help = false
 
 
@@ -89,7 +92,8 @@ def summary = [:]
 summary['Max Memory']     = params.max_memory
 summary['Max CPUs']       = params.max_cpus
 summary['Max Time']       = params.max_time
-summary['Output dir']     = params.outdir
+summary['Output dir (cramtar)']  = params.outdir_cramtar
+summary['Output dir (fastq)']    = params.outdir_fastq
 summary['Working dir']    = workflow.workDir
 summary['Current home']   = "$HOME"
 summary['Current path']   = "$PWD"
@@ -144,7 +148,7 @@ if (params.runid != null && params.lane != null) {
           val(igetspec) from igetlines
 
         output:
-          file('*.cram') into ch_sample_cram_file
+          file('*.cram') into ch_cram_tar
 
         script:
         """
@@ -179,7 +183,7 @@ else {
 
     process from_sample_lines {
         tag "${sample}"
-        publishDir "${params.outdir}/cramlists"
+        publishDir "${params.outdir_cramtar}/cramlists"
 
         input:
             val sample from ch_samplelines
@@ -224,7 +228,9 @@ else {
         input: 
             set val(sample), file(crams) from ch_cram_set
         output: 
-            file "${sample}.cram" into ch_sample_cram_file
+            file "${sample}.cram" into ch_cram_tar
+            set val(sample), file("${sample}.cram") into ch_fastq_publish
+
         script:
         cram0 = crams[0]
         """
@@ -241,12 +247,56 @@ else {
 }
 
 
+process crams_to_fastq {
+    tag "${sample}"
+    publishDir "${params.outdir_fastq}", mode: 'link'
+
+    when:
+        params.publish_fastq
+
+    input:
+        set val(sample), file(cramfile) from ch_cram_files
+
+    output:
+        file("${sample}_?.fastq.gz")
+        file("$sample.numreads.txt")
+
+    shell:
+        // 0.7 factor below: see https://github.com/samtools/samtools/issues/494
+        // This is not confirmed entirely just yet.
+        // def avail_mem = task.memory == null ? '' : "${ sprintf "%.0f", 0.7 * ( task.memory.toBytes() - 2000000000 ) / task.cpus}"
+    '''
+    f1=!{sample}_1.fastq.gz
+    f2=!{sample}_2.fastq.gz
+
+    numreads=$(samtools view --input-fmt-option required_fields=2 -c !{cramfile})
+    echo $numreads > !{sample}.numreads.txt
+                              # -O {stdout} -u {no compression}
+                              # -N {always append /1 and /2 to the read name}
+                              # -F 0x900 (bit 1, 8, filter secondary and supplementary reads)
+    samtools collate    \\
+        -O -u           \\
+        -@ !{task.cpus} \\
+        !{cramfile} pfx-!{sample} | \\
+    samtools fastq      \\
+        -N              \\
+        -F 0x900        \\
+        -@ !{task.cpus} \\
+        -1 $f1 -2 $f2 \\
+        -
+    """
+}
+
+
 process tar_crams {
    tag "${thecramfiles[0].baseName - '.cram'}"
-   publishDir "${params.outdir}/guitar", mode: 'move'
+   publishDir "${params.outdir_cramtar}", mode: 'move'
+
+   when:
+     params.publish_cramtar
 
    input:
-     file thecramfiles from ch_sample_cram_file.collect()
+     file thecramfiles from ch_cram_tar.collect()
 
    output:
      set file('*.tar'), file('*.md5')
