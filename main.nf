@@ -53,6 +53,10 @@ params.publish_cramtar = true
 params.publish_fastq   = false
 params.help = false
 
+my = [:]
+my.outdir_cramtar = params.outdir_cramtar ?: params.outdir
+my.outdir_fastq   = params.outdir_fastq   ?: params.outdir
+
 
 if (params.help) {
   helpMessage()
@@ -93,8 +97,8 @@ def summary = [:]
 summary['Max Memory']     = params.max_memory
 summary['Max CPUs']       = params.max_cpus
 summary['Max Time']       = params.max_time
-summary['Output dir (cramtar)']  = params.outdir_cramtar
-summary['Output dir (fastq)']    = params.outdir_fastq
+summary['Output dir (cramtar)']  = my.outdir_cramtar
+summary['Output dir (fastq)']    = my.outdir_fastq
 summary['Working dir']    = workflow.workDir
 summary['Current home']   = "$HOME"
 summary['Current path']   = "$PWD"
@@ -250,17 +254,17 @@ else {
 
 process crams_to_fastq {
     tag "${sample}"
-    publishDir "${params.outdir_fastq ?: params.outdir}", mode: 'link'
+    publishDir "${my.outdir_fastq}", mode: 'link'
 
     when:
         params.publish_fastq
 
     input:
-        set val(sample), file(cramfile) from ch_cram_files
+        set val(sample), file(cramfile) from ch_fastq_publish
 
     output:
         file("${sample}_?.fastq.gz")
-        file("$sample.numreads.txt")
+        file("${sample}.numreads.txt")
 
     shell:
         // 0.7 factor below: see https://github.com/samtools/samtools/issues/494
@@ -270,7 +274,7 @@ process crams_to_fastq {
     f1=!{sample}_1.fastq.gz
     f2=!{sample}_2.fastq.gz
 
-    numreads=$(samtools view --input-fmt-option required_fields=2 -c !{cramfile})
+    numreads=$(samtools view -c -F 0x900 !{cramfile})
     echo $numreads > !{sample}.numreads.txt
                               # -O {stdout} -u {no compression}
                               # -N {always append /1 and /2 to the read name}
@@ -291,7 +295,7 @@ process crams_to_fastq {
 
 process tar_crams {
    tag "${thecramfiles[0].baseName - '.cram'}"
-   publishDir "${params.outdir_cramtar}", mode: 'move'
+   publishDir "${my.outdir_cramtar}", mode: 'move'
 
    when:
      params.publish_cramtar
