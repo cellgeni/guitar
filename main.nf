@@ -8,34 +8,46 @@ vim: syntax=groovy
  #### Homepage / Documentation
  https://github.com/cellgeni/guitar
  #### Authors
- Vladimir Kiselev @wikiselev <vk6@sanger.ac.uk>
  Stijn van Dongen @micans <svd@sanger.ac.uk>
-----------------------------------------------------------------------------------------
+ Vladimir Kiselev @wikiselev <vk6@sanger.ac.uk>
 */
 
 // Pipeline version
-version = '0.2'
+version = '0.3'
 
 def helpMessage() {
     log.info"""
     =========================================
      rnaget pipeline v${version}
     =========================================
-    Use either
-      (a) --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
-      (b) --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
-      (c) --runid ID --lane NUM
+    This pipeline pulls samples from IRODS based on a list of sample IDs and a study ID.
+    The samples can be published as fastq files for consumption by analysis pipelines (use --publish_fastq),
+    and/or can be published as a tar archive of cram files for data sharing (use --publish_cramtar).
 
-    Studyid is queried in mlmwarehouse for sample names. Alternatively,
-    samplefile FNAME should have one sample name on each line; studyid can
+    For off/on options, use
+      --option false          (turn off)
+      --option true           (turn on)
+      --option                (turn on)
+
+    Publish modes: Use either one or both of
+      --publish_cramtar       (default off)
+      --publish_fastq         (default off)
+
+    The output directories can be set by
+      --outdir NAME           (default results)
+      --outdir_cramtar NAME   (default same as --outdir)
+      --outdir_fastq   NAME   (default same as --outdir)
+
+    Select modes: Use either
+ (a)  --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
+ (b)  --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
+ (c)  --runid ID --lane NUM
+
+    (a) Is the primary mode and the pipeline is used in the mode very frequently.
+    (b) and (c) have only seen incidental use.
+    In mode (a) samplefile FNAME should have one sample name on each line; studyid should
     still be used as samples may belong to multiple studies.
-
-    Either (1) a list of samplenames and/or a study id from (a|b) or (2) runid
-    and lane number from (c) are used to get cram files from IRODS. For (1)
-    these lists can be further controlled using --librarytype TYPE and
-    --manualqc off.
-
-    Then cram files are merged and tarred.
+    In mode (b) studyid is queried in mlmwarehouse for sample names.
     """.stripIndent()
 }
 
@@ -49,7 +61,7 @@ params.lane = null
 params.outdir          = "results"
 params.outdir_cramtar  = null
 params.outdir_fastq    = null
-params.publish_cramtar = true
+params.publish_cramtar = false
 params.publish_fastq   = false
 params.help = false
 
