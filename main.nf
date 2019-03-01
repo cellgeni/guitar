@@ -64,6 +64,7 @@ params.outdir_fastq    = null
 params.publish_cramtar = false
 params.publish_fastq   = false
 params.help = false
+params.tartag = "all_merged"
 
 my = [:]
 my.outdir_cramtar = params.outdir_cramtar ?: params.outdir
@@ -75,6 +76,7 @@ if (params.help) {
   exit 0
 }
 
+
 if ((params.runid != null && params.lane != null) || params.samplefile || params.studyid) {
 }
 else {
@@ -83,25 +85,7 @@ else {
 }
 
 
-/*
- * SET UP CONFIGURATION VARIABLES
- */
 
-
-// Configurable variables
-params.name = false
-params.tartag = "all_merged"
-
-
-// Has the run name been specified by the user?
-//  this has the bonus effect of catching both -name and --name
-custom_runName = params.name
-if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
-  custom_runName = workflow.runName
-}
-
-
-// Header log info
 log.info "========================================="
 log.info "         rnaget pipeline v${version}"
 log.info "========================================="
@@ -120,148 +104,151 @@ log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
 log.info "========================================="
 
 
-// Check that Nextflow version is up to date enough
-// try / throw / catch works for NF versions < 0.25 when this was implemented
-nf_required_version = '0.25.0'
-try {
-    if( ! nextflow.version.matches(">= $nf_required_version") ){
-        throw GroovyException('Nextflow version too old')
-    }
-} catch (all) {
-    log.error "====================================================\n" +
-              "  Nextflow version $nf_required_version required! You are running v$workflow.nextflow.version.\n" +
-              "  Pipeline execution will continue, but things may break.\n" +
-              "  Please run `nextflow self-update` to update Nextflow.\n" +
-              "============================================================"
-}
+
+/*
+  This code looks more complicated than it is. Some reasons:
+
+  - Three input modes: (a) samplefile + studyid (b) studyid (c) runID+laneNUM
+  - iget is parallelised, i.e. if a cram file consists of multiple files in IRODs.
+
+*/
 
 
+process from_runid {
 
-if (params.runid != null && params.lane != null) {
+    when: params.runid != null && params.lane != null
+      
+    output:
+        file('*igetlist.txt') optional true into ch_igetfile_fromrunid
 
+    script:
     semisample = params.runid + '-' + params.lane
-
-    process from_runid {
-        output:
-            file('*igetlist.txt') optional true into iget_file
-
-        script:
-        """
-        irods.sh -r ${params.runid} -l ${params.lane} -q ${params.manualqc} -D > ${semisample}.igetlist.txt
-        """
-    }
-
-    iget_file
-      .splitText()
-      .map { it.trim() }
-      .set { igetlines }
-
-    process run_iget {
-
-        tag "${semisample}"
-        maxForks 30
-
-        input:
-          val(igetspec) from igetlines
-
-        output:
-          file('*.cram') into ch_cram_tar
-
-        script:
-        """
-          iget -K ${igetspec}
-        """
-    }
+    """
+    irods.sh -r ${params.runid} -l ${params.lane} -q ${params.manualqc} -D > ${semisample}.igetlist.txt
+    """
 }
 
-else {
-    if (params.studyid != irodsnullvalue && params.samplefile == null) {
+ch_igetfile_fromrunid
+  .splitText()
+  .map { it.trim() }
+  .set { ch_tagindex }
 
-        process from_studyid {
-            output:
-                file studyid_samplefile into studyid_lines
-            script:
-            """
-            irods-list-study.sh ${params.studyid} | tail -n +2 | cut -f 1 | sort -u > studyid_samplefile
-            """
-        }
-        studyid_lines
-          .splitText()                  // TODO: see readLines below. unified idiom possible?
-          .map { it.trim() }
-          .set { ch_samplelines }
-    }
-    else if (params.samplefile != null) {
-        sample_list = Channel.fromPath(params.samplefile)
+process run_iget {
 
-        sample_list
-          .flatMap{ it.readLines() }    // TODO: see splitText() above. unified idiom possible?
-          .set { ch_samplelines }
-    }
+    maxForks 30
 
-    process from_sample_lines {
-        tag "${sample}"
-        publishDir "${params.outdir_cramtar}/cramlists"
+    input:
+      val(igetspec) from ch_tagindex
 
-        input:
-            val sample from ch_samplelines
-        output: 
-            set val(sample), file('*.igetlist.txt') optional true into ch_iget_file
-        script:
-        """
-        irods.sh -s ${sample} -t ${params.studyid} -y "${params.librarytype}" -q ${params.manualqc} -D > ${sample}.igetlist.txt
-        """
-    }
+    output:
+      file('*.cram') into ch_cram_tar_fromrunlane
 
-    ch_iget_file
-      .map { tag, file -> [tag, file.readLines() ] }
-      .map { tag, lines -> tuple( groupKey(tag, lines.size()), lines ) }
-      .transpose()
-      .set { ch_iget_item }
+    script:
+    """
+      iget -K ${igetspec}
+    """
+}
 
-    process do_iget {
-      tag "${samplename}-${igetitem}"
 
-      maxForks 30
+ch_sample_list = params.samplefile != null? Channel.fromPath(params.samplefile) : Channel.empty()
 
-      input:
-      set val(samplename), val(igetitem) from ch_iget_item
+ch_sample_list
+  .flatMap{ it.readLines() }
+  .set { ch_samplelines_sf }
 
-      output:
-      set val(samplename), file('*.cram') optional true into ch_iget_merge
 
-      script:
-      """
-      iget -N ${task.cpus} -K ${igetitem}
-      """
-    }
+process from_studyid {
+    when: params.studyid != irodsnullvalue && params.samplefile == null
 
-    ch_iget_merge
-      .groupTuple()
-      .set { ch_cram_set }
+    output:
+        file studyid_samplefile into ch_studyid_lines
+    script:
+    """
+    irods-list-study.sh ${params.studyid} | tail -n +2 | cut -f 1 | sort -u > studyid_samplefile
+    """
+}
 
-    process merge_from_cram_set {
-        tag "${sample}"
+ch_studyid_lines
+  .splitText()
+  .map { it.trim() }
+  .set { ch_samplelines_studyid }
 
-        input: 
-            set val(sample), file(crams) from ch_cram_set
-        output: 
-            file "${sample}.cram" into ch_cram_tar
-            set val(sample), file("${sample}.cram") into ch_fastq_publish
 
-        script:
-        cram0 = crams[0]
-        """
-        num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
-        if [[ \$num == 1 ]]; then
-            ln -s "${cram0}" ${sample}.cram
-        else
-            if ! samtools cat -o ${sample}.cram ${crams}; then
-                samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
-            fi
+ch_samplelines_sf.mix(ch_samplelines_studyid)
+  .set { ch_samplelines }
+
+
+process from_sample_lines {
+    tag "${sample}"
+    publishDir "${params.outdir_cramtar}/cramlists"
+
+    input:
+        val sample from ch_samplelines
+    output: 
+        set val(sample), file('*.igetlist.txt') optional true into ch_igetfile_fromsample
+    script:
+    """
+    irods.sh -s ${sample} -t ${params.studyid} -y "${params.librarytype}" -q ${params.manualqc} -D > ${sample}.igetlist.txt
+    """
+}
+
+
+ch_igetfile_fromsample
+  .map { tag, file -> [tag, file.readLines() ] }
+  .map { tag, lines -> tuple( groupKey(tag, lines.size()), lines ) }
+  .transpose()
+  .set { ch_iget_item }
+
+
+process do_iget {
+  tag "${samplename}-${igetitem}"
+
+  maxForks 30
+
+  input:
+  set val(samplename), val(igetitem) from ch_iget_item
+
+  output:
+  set val(samplename), file('*.cram') optional true into ch_iget_merge
+
+  script:
+  """
+  iget -N ${task.cpus} -K ${igetitem}
+  """
+}
+
+
+ch_iget_merge
+  .groupTuple()
+  .set { ch_cram_set }
+
+
+process merge_from_cram_set {
+    tag "${sample}"
+
+    input: 
+        set val(sample), file(crams) from ch_cram_set
+    output: 
+        file "${sample}.cram" into ch_cram_tar_fromids
+        set val(sample), file("${sample}.cram") into ch_fastq_publish
+
+    script:
+    cram0 = crams[0]
+    """
+    num=\$(for f in ${crams}; do echo \$f; done | grep -c ".cram\$");
+    if [[ \$num == 1 ]]; then
+        ln -s "${cram0}" ${sample}.cram
+    else
+        if ! samtools cat -o ${sample}.cram ${crams}; then
+            samtools merge -@ ${task.cpus} -f ${sample}.cram ${crams}
         fi
-        """
-    }
+    fi
+    """
 }
+
+
+ch_cram_tar_fromrunlane.mix(ch_cram_tar_fromids)
+  .set { ch_cram_tar }
 
 
 process crams_to_fastq {
