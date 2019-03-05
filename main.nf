@@ -180,7 +180,7 @@ ch_samplelines_sf.mix(ch_samplelines_studyid)
 
 process from_sample_lines {
     tag "${sample}"
-    publishDir "${params.outdir_cramtar}/cramlists"
+    publishDir "${my.outdir_cramtar}/cramlists"
 
     input:
         val sample from ch_samplelines
