@@ -116,6 +116,8 @@ log.info "========================================="
 
 process from_runid {
 
+    memory 1.GB
+
     when: params.runid != null && params.lane != null
       
     output:
@@ -135,7 +137,8 @@ ch_igetfile_fromrunid
 
 process run_iget {
 
-    maxForks 30
+    memory 1.GB
+    maxForks 20
 
     input:
       val(igetspec) from ch_tagindex
@@ -158,6 +161,9 @@ ch_sample_list
 
 
 process from_studyid {
+
+    memory 1.GB
+
     when: params.studyid != irodsnullvalue && params.samplefile == null
 
     output:
@@ -178,7 +184,12 @@ ch_samplelines_sf.mix(ch_samplelines_studyid)
   .set { ch_samplelines }
 
 
+
 process from_sample_lines {
+
+    memory 1.GB
+    maxForks 30
+
     tag "${sample}"
     publishDir "${my.outdir_cramtar}/cramlists"
 
@@ -203,6 +214,7 @@ ch_igetfile_fromsample
 process do_iget {
   tag "${samplename}-${igetitem}"
 
+  // Memory and cpus set in base.config
   maxForks 30
 
   input:
@@ -226,11 +238,14 @@ ch_iget_merge
 process merge_from_cram_set {
     tag "${sample}"
 
+    // Memory and cpus set in base.config
+
     input: 
-        set val(sample), file(crams) from ch_cram_set
+    set val(sample), file(crams) from ch_cram_set
+
     output: 
-        file "${sample}.cram" into ch_cram_tar_fromids
-        set val(sample), file("${sample}.cram") into ch_fastq_publish
+    file "${sample}.cram" into ch_cram_tar_fromids
+    set val(sample), file("${sample}.cram") into ch_fastq_publish
 
     script:
     cram0 = crams[0]
