@@ -29,9 +29,10 @@ def helpMessage() {
       --option true           (turn on)
       --option                (turn on)
 
-    Publish modes: Use either one or both of
+    Publish modes: Use either one or more of
       --publish_cramtar       (default off)
       --publish_fastq         (default off)
+      --publish_crams         (default off)
 
     The output directories can be set by
       --outdir NAME           (default results)
@@ -60,14 +61,17 @@ params.runid = null
 params.lane = null
 params.outdir          = "results"
 params.outdir_cramtar  = null
+params.outdir_crams    = null
 params.outdir_fastq    = null
 params.publish_cramtar = false
 params.publish_fastq   = false
+params.publish_crams   = false
 params.help = false
 params.tartag = "all_merged"
 
 my = [:]
 my.outdir_cramtar = params.outdir_cramtar ?: params.outdir
+my.outdir_crams   = params.outdir_crams   ?: params.outdir
 my.outdir_fastq   = params.outdir_fastq   ?: params.outdir
 
 
@@ -263,7 +267,13 @@ process merge_from_cram_set {
 
 
 ch_cram_tar_fromrunlane.mix(ch_cram_tar_fromids)
-  .set { ch_cram_tar }
+  .into { ch_cram_tar; ch_publish_cram }
+
+ch_publish_cram
+  .until{ !params.publish_crams }
+  .subscribe {
+      it.copyTo("${params.outdir_crams}/")
+  }
 
 
 process crams_to_fastq {
