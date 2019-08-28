@@ -121,6 +121,7 @@ log.info "========================================="
 process from_runid {
 
     memory 1.GB
+    label 'irods'
 
     when: params.runid != null && params.lane != null
       
@@ -143,6 +144,7 @@ process run_iget {
 
     memory 1.GB
     maxForks 20
+    label 'irods'
 
     input:
       val(igetspec) from ch_tagindex
@@ -167,6 +169,7 @@ ch_sample_list
 process from_studyid {
 
     memory 1.GB
+    label 'irods'
 
     when: params.studyid != irodsnullvalue && params.samplefile == null
 
@@ -193,6 +196,7 @@ process from_sample_lines {
 
     memory 1.GB
     maxForks 30
+    label 'irods'
 
     tag "${sample}"
     publishDir "${my.outdir_cramtar}/cramlists"
@@ -220,6 +224,7 @@ process do_iget {
 
   // Memory and cpus set in base.config
   maxForks 30
+    label 'irods'
 
   input:
   set val(samplename), val(igetitem) from ch_iget_item
