@@ -37,6 +37,7 @@ def helpMessage() {
     The output directories can be set by
       --outdir NAME           (default results)
       --outdir_cramtar NAME   (default same as --outdir)
+      --outdir_crams   NAME   (default same as --outdir)
       --outdir_fastq   NAME   (default same as --outdir)
 
     Select modes: Use either

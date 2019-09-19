@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+file=$1
+
+set +o errexit
+nsq=$(samtools view -H $file | grep '^@SQ' | wc -l)
+set -o errexit
+
+if [ $nsq -gt 0 ] ; then
+  bamcollate2 inputformat=cram reset=1 resetaux=0 auxfilter=BC,QT,RG level=0 < $file | \
+  samtools fastq -1 ${file}_R1_001.fastq.gz -2 ${file}_R2_001.fastq.gz --i1 ${file}_I1_001.fastq.gz --index-format "i*" -n -i -
+else
+  samtools fastq -1 ${file}_R1_001.fastq.gz -2 ${file}_R2_001.fastq.gz --i1 ${file}_I1_001.fastq.gz --index-format "i*" -n -i $file
+fi

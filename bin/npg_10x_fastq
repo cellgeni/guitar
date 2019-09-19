@@ -1,0 +1,135 @@
+#!/bin/bash
+
+#########################################################################
+#
+# npg_10x_fastq
+#
+# for usage run
+#
+#   npg_10x_fastq -h
+#
+#########################################################################
+
+initialise ()
+{
+    # set defaults
+    sample=""
+    id_run=""
+    ncores=1
+    TEMP=`getopt -a -o h --long cores:,sample:,id_run:,help -n $0 -- "$@"`
+
+    if [ $? != 0 ] ; then echo "Terminating..." ; exit 1 ; fi
+
+    eval set -- "$TEMP"
+
+    while true ; do
+        case "$1" in
+            --sample) sample=$2; echo "sample $sample"; shift 2 ;;
+            --id_run) id_run=$2; echo "id_run $id_run"; shift 2 ;;
+            --cores)  ncores=$2; echo "ncores $ncores"; shift 2 ;;
+            -h|--help) echo "Usage: $0 [options]";
+                       echo "                   ";
+                       echo "       --sample <sample>            sample name";
+                       echo "                   ";
+                       echo "       --cores  <num>               number of cores available";
+                       echo "                   ";
+                       echo "       --id_run <id_run>            if not specified analyse ALL the cram files belonging to the sample";
+                       echo "                   ";
+                       echo "       -h|--help   ";
+                       echo "                   ";
+                       exit 0 ;;
+            --) shift ; break ;;
+            *) echo "Unrecognised option $1"; exit 1 ;;
+        esac
+    done
+
+    if [ -z $sample ] ; then
+        echo "You must supply a sample"
+        exit 1
+    fi
+}
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+initialise "$@"
+
+toplevel=$PWD
+
+echo "identifying cram files"
+imeta="imeta qu -z /seq -d"
+if [ $id_run ] ; then
+  imeta="$imeta id_run = $id_run and"
+fi
+imeta="$imeta sample = $sample and type = cram and target = 1"
+count=`$imeta | perl -ne 'if(m/collection: (\S+)/) {$c=$1} elsif(m/dataObj: (\S+)/) {print "$c/$1\n" unless m/yhuman/}' | wc -l`
+if [ $count -eq 0 ] ; then
+  echo "imeta command '$imeta' did not identify any cram files in iRods"
+  exit 1
+fi
+
+echo "downloading cram files"
+fastqs=""
+ncrams=0
+for irods_file in `$imeta | perl -ne 'if(m/collection: (\S+)/) {$c=$1} elsif(m/dataObj: (\S+)/) {print "$c/$1\n" unless m/yhuman/}'` ; do
+  fastq=$toplevel/$(basename $irods_file | cut -d'_' -f1,1)
+  if [ $fastqs ] ; then
+    fastqs="${fastqs},${fastq}"
+  else
+    fastqs=$fastq
+  fi
+  if [ ! -d $fastq ] ; then
+    mkdir -p $fastq
+  fi
+  cd $fastq
+  local_file=$(basename $irods_file)
+  if [ -s $local_file ] ; then
+    echo "cram file $local_file already exists"
+    lane=`echo ${local_file} | perl -ne 'print $1 if m/\d+_(\d)\#\d+\.cram$/'`
+    # cellranger expects a lane even if the cram files are merged across lanes
+    if [ -z $lane ] ; then
+      lane=1
+    fi
+    tag=`echo ${local_file} | perl -ne 'print $1 if m/\d+(?:_\d)?\#(\d+)\.cram$/'`
+    prefix=${sample}_S${tag}_L00${lane}
+    nfiles=0
+    for new_file in ${prefix}_{R1,R2,I1}_001.fastq.gz ; do
+      if [ -s $new_file ] ; then
+        nfiles=$((nfiles+1))
+      fi
+    done
+    if [ $nfiles -eq 3 ] ; then
+      echo "fastq files with prefix ${prefix} already exist"
+      continue
+    fi
+  else
+    iget $irods_file $local_file
+  fi
+  ncrams=$((ncrams+1))
+  crams[$ncrams]=$fastq/$local_file
+done
+fastqs=`echo $fastqs | perl -aF',' -lne 'for (@F) {$t{$_}++} END{ print join(",",(sort keys %t)) }'`
+
+if [ $ncrams -gt 0 ] ; then
+  echo "generating fastq files"
+  parallel -j $ncores npg_10x_mkfastq ::: ${crams[*]}
+
+  echo "renaming fastq files"
+  for file in ${crams[*]} ; do
+    fastq=$(dirname $file)
+    cd $fastq
+    old_prefix=$(basename $file)
+    lane=`echo $file | perl -ne 'print $1 if m/\d+_(\d)\#\d+\.cram$/'`
+    # cellranger expects a lane even if the cram files are merged across lanes
+    if [ -z $lane ] ; then
+      lane=1
+    fi
+    tag=`echo $file | perl -ne 'print $1 if m/\d+(?:_\d)?\#(\d+)\.cram$/'`
+    new_prefix=${sample}_S${tag}_L00${lane}
+    for old_file in ${old_prefix}_{R1,R2,I1}_001.fastq.gz ; do
+      new_file=${old_file/${old_prefix}/${new_prefix}} 
+      mv $old_file $new_file
+    done
+  done
+fi  
