@@ -44,6 +44,7 @@ def helpMessage() {
  (a)  --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
  (b)  --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
  (c)  --runid ID --lane NUM
+ (d)  --samplefile10x FNAME [ --outdir_fastq | --outdir ]
 
     (a) Is the primary mode and the pipeline is used in the mode very frequently.
     (b) and (c) have only seen incidental use.
@@ -158,12 +159,16 @@ process run_iget {
 }
 
 
-ch_sample_list = params.samplefile != null? Channel.fromPath(params.samplefile) : Channel.empty()
+ch_sample_list    = params.samplefile    != null? Channel.fromPath(params.samplefile)    : Channel.empty()
+ch_sample_list10x = params.samplefile10x != null? Channel.fromPath(params.samplefile10x) : Channel.empty()
 
 ch_sample_list
   .flatMap{ it.readLines() }
   .set { ch_samplelines_sf }
 
+ch_sample_list10x
+  .flatMap{ it.readLines() }
+  .set { ch_samplelines_10x }
 
 process from_studyid {
 
@@ -206,6 +211,29 @@ process from_sample_lines {
     """
     irods.sh -s ${sample} -t ${params.studyid} -y "${params.librarytype}" -q ${params.manualqc} -D > ${sample}.igetlist.txt
     """
+}
+
+
+process from_sample_lines10x {
+
+    tag "${sample}"
+
+    publishDir "${my.outdir_fastq}", mode: 'move'
+
+    input:
+        val sample from ch_samplelines_10x
+    output: 
+        file '*.tar'
+        file '*.counts'
+    shell:
+    '''
+    npg_10x_fastq --sample !{sample} --cores !{task.cpus}
+    nfiles=$(ls */*.fastq.gz | wc -l)
+    echo -e "!{sample}\t$nfiles" >> !{sample}.counts
+    if (( $nfiles > 0 )); then
+      tar cf !{sample}.tar --transform='s/.*\\///' */*.fastq.gz
+    fi
+    '''
 }
 
 
