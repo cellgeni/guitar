@@ -56,6 +56,7 @@ def helpMessage() {
 
 def irodsnullvalue = "--"
 params.samplefile = null
+params.samplefile10x = null
 params.studyid      = irodsnullvalue
 params.librarytype  = irodsnullvalue
 params.manualqc     = irodsnullvalue
