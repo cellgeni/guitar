@@ -219,7 +219,7 @@ process from_sample_lines10x {
 
     tag "${sample}"
 
-    publishDir "${my.outdir_fastq}", mode: 'move'
+    publishDir "${my.outdir_fastq}", mode: 'link'
 
     input:
         val sample from ch_samplelines_10x
@@ -302,7 +302,7 @@ ch_cram_tar_fromrunlane.mix(ch_cram_tar_fromids)
 ch_publish_cram
   .until{ !params.publish_crams }
   .subscribe {
-      it.copyTo("${params.outdir_crams}/")
+      it.copyTo("${my.outdir_crams}/")
   }
 
 
