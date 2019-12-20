@@ -44,7 +44,7 @@ def helpMessage() {
  (a)  --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
  (b)  --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
  (c)  --runid ID --lane NUM
- (d)  --samplefile10x FNAME [ --outdir_fastq | --outdir ]
+ (d)  --samplefile10x FNAME [ --outdir_fastq | --outdir ] [--tar10x false]
 
     (a) Is the primary mode and the pipeline is used in the mode very frequently.
     (b) and (c) have only seen incidental use.
@@ -57,6 +57,7 @@ def helpMessage() {
 def irodsnullvalue = "--"
 params.samplefile = null
 params.samplefile10x = null
+params.tar10x       = true
 params.studyid      = irodsnullvalue
 params.librarytype  = irodsnullvalue
 params.manualqc     = irodsnullvalue
@@ -224,14 +225,15 @@ process from_sample_lines10x {
     input:
         val sample from ch_samplelines_10x
     output: 
-        file '*.tar'
+        file '*.tar' optional true
+        file '*/*.fastq.gz'
         file '*.counts'
     shell:
     '''
     npg_10x_fastq --sample !{sample} --cores !{task.cpus}
     nfiles=$(ls */*.fastq.gz | wc -l)
     echo -e "!{sample}\t$nfiles" >> !{sample}.counts
-    if (( $nfiles > 0 )); then
+    if (( $nfiles > 0 )) && [[ !{params.tar10x} == 'true' ]]; then
       tar cf !{sample}.tar --transform='s/.*\\///' */*.fastq.gz
     fi
     '''
