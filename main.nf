@@ -226,35 +226,15 @@ process from_sample_lines10x {
         val sample from ch_samplelines_10x
     output: 
         file '*.tar' optional true
-        file '*.igetlist.txt'
-        file "$sample"
+        file '*/*.fastq.gz'
+        file '*.counts'
     shell:
     '''
-    irods.sh -s !{sample} -D > !{sample}.igetlist.txt     # fixme add error/count checking
-    mkdir !{sample}
-    cd !{sample}
-    while read crampath; do
-      cramfile=${crampath##*/}
-      base=${cramfile%.cram}
-      iget -N !{task.cpus} -K $crampath
-      samtools fastq        \\
-          -N                \\
-          -F 0x900          \\
-          -@ !{task.cpus}   \\
-          -1 $base''_1.fastq.gz -2 $base''_2.fastq.gz \\
-          $cramfile
-      rm $cramfile
-    done < ../!{sample}.igetlist.txt
-    cd ..
-
-    # the old way. Keep this around for a bit, may need reinstating. who needs git anyway.
-    # npg_10x_fastq --sample !{sample} --cores !{task.cpus}
-    # nfiles=$(ls */*.fastq.gz | wc -l)
-    # echo -e "!{sample}\t$nfiles" >> !{sample}.counts
-    # tar cf !{sample}.tar --transform='s/.*\\///' */*.fastq.gz
-
-    if [[ !{params.tar10x} == 'true' ]]; then
-      tar cf !{sample}.tar !{sample}
+    npg_10x_fastq --sample !{sample} --cores !{task.cpus}
+    nfiles=$(ls */*.fastq.gz | wc -l)
+    echo -e "!{sample}\t$nfiles" >> !{sample}.counts
+    if (( $nfiles > 0 )) && [[ !{params.tar10x} == 'true' ]]; then
+      tar cf !{sample}.tar --transform='s/.*\\///' */*.fastq.gz
     fi
     '''
 }
