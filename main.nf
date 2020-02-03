@@ -225,17 +225,40 @@ process from_sample_lines10x {
     input:
         val sample from ch_samplelines_10x
     output: 
-        file '*.tar' optional true
-        file '*/*.fastq.gz'
-        file '*.counts'
+        file "$sample*.fastq.gz"
+        file "${sample}.storage"
+
     shell:
     '''
     npg_10x_fastq --sample !{sample} --cores !{task.cpus}
-    nfiles=$(ls */*.fastq.gz | wc -l)
-    echo -e "!{sample}\t$nfiles" >> !{sample}.counts
-    if (( $nfiles > 0 )) && [[ !{params.tar10x} == 'true' ]]; then
-      tar cf !{sample}.tar --transform='s/.*\\///' */*.fastq.gz
+    # The above script may create multiple directories
+
+    # Make sure the file name patterns are identical:
+    # (1) get the respective lists
+    list1=$(echo */*''_S*_L00*_R1_001.fastq.gz)
+    list2=$(echo */*''_S*_L00*_R2_001.fastq.gz)
+    list3=$(echo */*''_S*_L00*_I1_001.fastq.gz)
+
+    echo "$list1 $list2 $list3" | tr ' ' '\\n' > !{sample}.storage
+
+    # (2) Map the r1 list onto the r2 list and the i1 list
+    list12=${list1//R1/R2}
+    list13=${list1//R1/I1}
+
+    # (3) The maps should be identical to the r2 list and the i1 list
+    if [[ "$list12" != "$list2" || "$list13" != "$list3" ]]; then
+      echo "Lists do not correspond to each other, please check"
+      false
     fi
+    cat $list1 > !{sample}_r1.fastq.gz
+    cat $list2 > !{sample}_r2.fastq.gz
+    cat $list3 > !{sample}_i1.fastq.gz
+
+    # nfiles=$(ls */*.fastq.gz | wc -l)
+    # echo -e "!{sample}\t$nfiles" >> !{sample}.counts
+    # if (( $nfiles > 0 )) && [[ !{params.tar10x} == 'true' ]]; then
+    #   tar cf !{sample}.tar --transform='s/.*\\///' */*.fastq.gz
+    # fi
     '''
 }
 
@@ -313,7 +336,7 @@ process crams_to_fastq {
     publishDir "${my.outdir_fastq}", mode: 'link'
 
     when:
-        params.publish_fastq
+        params.publish_fastq && params.samplefile
 
     input:
         set val(sample), file(cramfile) from ch_fastq_publish
