@@ -251,13 +251,16 @@ process from_sample_lines10x {
       echo "Lists do not correspond to each other, please check"
       false
     fi
+cat <<EOC > concat.sh
+cat $list1 > !{sample}_r1.fastq.gz
+rm $list1
+cat $list2 > !{sample}_r2.fastq.gz
+rm $list2
+cat $list3 > !{sample}_i1.fastq.gz
+rm $list3
+EOC
     if [[ !{params.cat10x} == 'true' ]]; then
-      cat $list1 > !{sample}_r1.fastq.gz
-      rm $list1
-      cat $list2 > !{sample}_r2.fastq.gz
-      rm $list2
-      cat $list3 > !{sample}_i1.fastq.gz
-      rm $list3
+      bash -e concat.sh
     fi
 
     # nfiles=$(ls */*.fastq.gz | wc -l)
