@@ -44,7 +44,7 @@ def helpMessage() {
  (a)  --samplefile FNAME  [ --studyid ID ] [ --librarytype TYPE ] [ --manualqc off ]
  (b)  --studyid ID [ --librarytype TYPE ] [ --manualqc off ]
  (c)  --runid ID --lane NUM
- (d)  --samplefile10x FNAME [ --outdir_fastq | --outdir ] [--tar10x false]
+ (d)  --samplefile10x FNAME [ --outdir_fastq | --outdir ] [--cat10x true ]
 
     (a) Is the primary mode and the pipeline is used in the mode very frequently.
     (b) and (c) have only seen incidental use.
@@ -57,7 +57,7 @@ def helpMessage() {
 def irodsnullvalue = "--"
 params.samplefile = null
 params.samplefile10x = null
-params.tar10x       = true
+params.cat10x       = false
 params.studyid      = irodsnullvalue
 params.librarytype  = irodsnullvalue
 params.manualqc     = irodsnullvalue
@@ -225,11 +225,12 @@ process from_sample_lines10x {
     input:
         val sample from ch_samplelines_10x
     output: 
-        file "$sample*.fastq.gz"
-        file "${sample}.storage"
+        file "$sample"
 
     shell:
     '''
+    mkdir !{sample}
+    cd !{sample}
     npg_10x_fastq --sample !{sample} --cores !{task.cpus}
     # The above script may create multiple directories
 
@@ -250,9 +251,14 @@ process from_sample_lines10x {
       echo "Lists do not correspond to each other, please check"
       false
     fi
-    cat $list1 > !{sample}_r1.fastq.gz
-    cat $list2 > !{sample}_r2.fastq.gz
-    cat $list3 > !{sample}_i1.fastq.gz
+    if [[ !{params.cat10x} == 'true' ]]; then
+      cat $list1 > !{sample}_r1.fastq.gz
+      rm $list1
+      cat $list2 > !{sample}_r2.fastq.gz
+      rm $list2
+      cat $list3 > !{sample}_i1.fastq.gz
+      rm $list3
+    fi
 
     # nfiles=$(ls */*.fastq.gz | wc -l)
     # echo -e "!{sample}\t$nfiles" >> !{sample}.counts
