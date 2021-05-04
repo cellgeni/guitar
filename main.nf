@@ -252,12 +252,16 @@ process from_sample_lines10x {
       false
     fi
 cat <<EOC > concat.sh
+#!/bin/bash
+set -euo pipefail
+
 cat $list1 > !{sample}_r1.fastq.gz
 rm $list1
 cat $list2 > !{sample}_r2.fastq.gz
 rm $list2
 cat $list3 > !{sample}_i1.fastq.gz
 rm $list3
+for f in *.fastq.gz; do md5sum $f > $f.md5; done
 EOC
     if [[ !{params.cat10x} == 'true' ]]; then
       bash -e concat.sh
