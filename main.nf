@@ -169,7 +169,7 @@ ch_sample_list
   .set { ch_samplelines_sf }
 
 ch_sample_list10x
-  .flatMap{ it.readLines() }
+  .splitCsv(sep: '\t')  // .flatMap{ it.readLines() }
   .set { ch_samplelines_10x }
 
 process from_studyid {
@@ -223,53 +223,57 @@ process from_sample_lines10x {
     publishDir "${my.outdir_fastq}", mode: 'link'
 
     input:
-        val sample from ch_samplelines_10x
+        set val(sample), val(libtype) from ch_samplelines_10x
     output: 
-        file "$sample"
+        file "${sample}"
 
     shell:
     '''
-    mkdir !{sample}
+    get-10x-generic.sh !{sample} "!{libtype}"
+
     cd !{sample}
-    npg_10x_fastq --sample !{sample} --cores !{task.cpus}
-    # The above script may create multiple directories
 
     # Make sure the file name patterns are identical:
     # (1) get the respective lists
-    list1=$(echo */*''_S*_L00*_R1_001.fastq.gz)
-    list2=$(echo */*''_S*_L00*_R2_001.fastq.gz)
-    list3=$(echo */*''_S*_L00*_I1_001.fastq.gz)
+    list_r1=$(echo */*/*''_S*_L*_R1_*.fastq.gz)
+    list_r2=$(echo */*/*''_S*_L*_R2_*.fastq.gz)
+    list_i1=$(echo */*/*''_S*_L*_I1_*.fastq.gz)
+    list_i2=$(shopt -s nullglob; echo */*/*''_S*_L*_I2_*.fastq.gz)
 
-    echo "$list1 $list2 $list3" | tr ' ' '\\n' > !{sample}.storage
+    echo "$list_r1 $list_r2 $list_i1" | tr ' ' '\\n' > !{sample}.storage
 
     # (2) Map the r1 list onto the r2 list and the i1 list
-    list12=${list1//R1/R2}
-    list13=${list1//R1/I1}
+    list_r1r2=${list_r1//R1/R2}
+    list_r1i1=${list_r1//R1/I1}
 
     # (3) The maps should be identical to the r2 list and the i1 list
-    if [[ "$list12" != "$list2" || "$list13" != "$list3" ]]; then
+    if [[ "$list_r1r2" != "$list_r2" || "$list_r1i1" != "$list_i1" ]]; then
       echo "Lists do not correspond to each other, please check"
       false
     fi
-cat <<EOC > concat.sh
+cat <<EOC > !{sample}-concat.sh
 #!/bin/bash
 set -euo pipefail
 
-cat $list1 > !{sample}_r1.fastq.gz
-rm $list1
-cat $list2 > !{sample}_r2.fastq.gz
-rm $list2
-cat $list3 > !{sample}_i1.fastq.gz
-rm $list3
+cat $list_r1 > !{sample}_S1_L001_R1_001.fastq.gz
+rm $list_r1
+cat $list_r2 > !{sample}_S1_L001_R2_001.fastq.gz
+rm $list_r2
+cat $list_i1 > !{sample}_S1_L001_I1_001.fastq.gz
+rm $list_i1
+if [[ ! -z $list_i2 ]]; then
+  cat $list_i2 > !{sample}_S1_L001_I2_001.fastq.gz
+  rm $list_i2
+fi
 for f in *.fastq.gz; do md5sum \\$f > \\$f.md5; done
 EOC
     if [[ !{params.cat10x} == 'true' ]]; then
-      bash -e concat.sh
+      bash -e !{sample}-concat.sh
     fi
 
     # nfiles=$(ls */*.fastq.gz | wc -l)
     # echo -e "!{sample}\t$nfiles" >> !{sample}.counts
-    # if (( $nfiles > 0 )) && [[ !{params.tar10x} == 'true' ]]; then
+    # if (( $nfiles > 0 )) && [[ {params.tar10x} == 'true' ]]; then
     #   tar cf !{sample}.tar --transform='s/.*\\///' */*.fastq.gz
     # fi
     '''
@@ -373,12 +377,12 @@ process crams_to_fastq {
                               # -F 0x900 (bit 1, 8, filter secondary and supplementary reads)
     samtools collate    \\
         -O -u           \\
-        -@ !{task.cpus} \\
+        -@ !{task.cpus/2} \\
         !{cramfile} pfx-!{sample} | \\
     samtools fastq      \\
         -N              \\
         -F 0x900        \\
-        -@ !{task.cpus} \\
+        -@ !{task.cpus/2} \\
         -1 $f1 -2 $f2 \\
         -
     '''
