@@ -8,7 +8,11 @@ runlist=${3:-nil}
 
 if [[ $runlist == 'nil' ]]; then
   runlist=$(myrods.sh -s $sample -D -q off  | cut -f 6 -d '/' | sort -u)
+  if [[ -z $runlist ]]; then
+    runlist=$(myrods.sh -s $sample -D -q off  | cut -f 3 -d '/' | sort -u)
+  fi
 fi
+
 
 echo "sample [$sample] libtype [$libtype] runlist [$runlist]"
 

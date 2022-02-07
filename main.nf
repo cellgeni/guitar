@@ -261,9 +261,9 @@ cat $list_r2 > !{sample}_S1_L001_R2_001.fastq.gz
 rm $list_r2
 cat $list_i1 > !{sample}_S1_L001_I1_001.fastq.gz
 rm $list_i1
-if [[ ! -z $list_i2 ]]; then
-  cat $list_i2 > !{sample}_S1_L001_I2_001.fastq.gz
-  rm $list_i2
+if [[ ! -z "$list_i2" ]]; then
+  cat /dev/null $list_i2 > !{sample}_S1_L001_I2_001.fastq.gz
+  rm -f $list_i2
 fi
 for f in *.fastq.gz; do md5sum \\$f > \\$f.md5; done
 EOC
