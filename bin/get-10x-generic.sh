@@ -23,7 +23,7 @@ cd $sample
 
 for run in $runlist; do
   echo "$sample $run"
-  nsp-cellranger-run.sh --sample $sample --id_run=$run --library_type "$libtype" --noanalysis --noarchive
+  nsp-cellranger-run.sh --sample $sample --id_run=$run --library_type "$libtype" --noanalysis --noarchive --noqc
 done
 
 
