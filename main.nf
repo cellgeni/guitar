@@ -243,8 +243,8 @@ process from_sample_lines10x {
     echo "$list_r1 $list_r2 $list_i1" | tr ' ' '\\n' > !{sample}.storage
 
     # (2) Map the r1 list onto the r2 list and the i1 list
-    list_r1r2=${list_r1//R1/R2}
-    list_r1i1=${list_r1//R1/I1}
+    list_r1r2=${list_r1//_R1/_R2}
+    list_r1i1=${list_r1//_R1/_I1}
 
     # (3) The maps should be identical to the r2 list and the i1 list
     if [[ "$list_r1r2" != "$list_r2" || "$list_r1i1" != "$list_i1" ]]; then
